@@ -199,10 +199,44 @@ endef
 ENVTEST ?= $(LOCALBIN)/setup-envtest-$(ENVTEST_VERSION)
 ENVTEST_VERSION ?= release-0.20
 
+.PHONY: tools
+tools: $(ENVTEST) $(CONTROLLER_GEN) $(GEN_CRD_API_REFERENCE_DOCS)
+
+CONTROLLER_TOOLS_VERSION ?= v0.16.5
+CONTROLLER_GEN ?= $(LOCALBIN)/controller-gen-$(CONTROLLER_TOOLS_VERSION)
+
+GEN_CRD_API_REFERENCE_DOCS_VERSION ?= v0.3.0
+GEN_CRD_API_REFERENCE_DOCS ?= $(LOCALBIN)/gen-crd-api-reference-docs-$(GEN_CRD_API_REFERENCE_DOCS_VERSION)
+
 .PHONY: envtest
 envtest: $(ENVTEST) ## Download setup-envtest locally if necessary.
 $(ENVTEST): $(LOCALBIN)
 	$(call go-install-tool,$(ENVTEST),sigs.k8s.io/controller-runtime/tools/setup-envtest,$(ENVTEST_VERSION))
+
+$(CONTROLLER_GEN): $(LOCALBIN)
+	$(call go-install-tool,$(CONTROLLER_GEN),sigs.k8s.io/controller-tools/cmd/controller-gen,$(CONTROLLER_TOOLS_VERSION))
+
+$(GEN_CRD_API_REFERENCE_DOCS): $(LOCALBIN)
+	$(call go-install-tool,$(GEN_CRD_API_REFERENCE_DOCS),github.com/ahmetb/gen-crd-api-reference-docs,$(GEN_CRD_API_REFERENCE_DOCS_VERSION))
+
+.PHONY: generate-crds
+generate-crds: $(CONTROLLER_GEN)
+	mkdir -p config/crd/bases
+	$(CONTROLLER_GEN) \
+		crd:crdVersions=v1 \
+		paths=./pkg/jetstream/apis/... \
+		output:crd:artifacts:config=./config/crd/bases
+
+.PHONY: generate-docs
+generate-docs: $(GEN_CRD_API_REFERENCE_DOCS)
+	$(GEN_CRD_API_REFERENCE_DOCS) \
+		-config ./docs/gen-crd-api-reference-docs.json \
+		-api-dir ./pkg/jetstream/apis \
+		-template-dir ./docs/template \
+		-out-file ./docs/api.md
+
+.PHONY: generate-all
+generate-all: generate generate-crds generate-docs
 
 
 .PHONY: test
